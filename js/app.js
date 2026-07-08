@@ -131,7 +131,21 @@
         return;
       }
 
-      this.els.status.textContent = 'Requesting camera & sensors…';
+      // iOS: DeviceOrientation permission MUST be requested synchronously inside
+      // the tap, BEFORE any await — awaiting getUserMedia below would consume the
+      // user activation and make iOS silently deny motion. So ask for it first.
+      this.els.status.textContent = 'Requesting motion access…';
+      const oriOK = await Sensors.requestPermission();
+      if (!oriOK) {
+        this.els.status.innerHTML =
+          'Motion access was blocked. Enable it in <b>Settings → Apps → Safari → ' +
+          'Motion &amp; Orientation Access</b> (or Settings → Safari on older iOS), ' +
+          'then tap again.';
+        this.els.startBtn.disabled = false;
+        return;
+      }
+
+      this.els.status.textContent = 'Requesting camera…';
       try {
         await Camera.start(this.els.video);
       } catch (e) {
@@ -139,9 +153,7 @@
         this.els.startBtn.disabled = false;
         return;
       }
-      const oriOK = await Sensors.requestPermission();
       Sensors.start();
-      if (!oriOK) this.toast('Motion sensors were blocked — orientation may not work.');
 
       this.els.start.hidden = true;
       this.els.reticle.hidden = false;
