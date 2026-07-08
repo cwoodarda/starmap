@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#05070f" />
+  <title>StarMap — Point at the Sky</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="StarMap" />
+</head>
+<body>
+  <!-- live camera feed -->
+  <video id="video" playsinline autoplay muted></video>
+  <!-- sky overlay -->
+  <canvas id="overlay"></canvas>
+  <!-- aiming reticle (shown once running) -->
+  <div id="reticle" hidden></div>
+
+  <!-- top control bar -->
+  <div id="controls">
+    <button id="btn-panel" title="Layers &amp; settings">☰</button>
+    <button id="btn-calibrate" title="Align to the sky">🎯</button>
+    <button id="btn-reset-cal" title="Reset alignment">↺</button>
+    <button id="btn-hud" title="Debug info">ⓘ</button>
+  </div>
+
+  <!-- settings / layers panel -->
+  <div id="panel" hidden>
+    <h2>Layers</h2>
+    <label><input type="checkbox" data-setting="stars" /> Stars</label>
+    <label><input type="checkbox" data-setting="constellations" /> Constellations</label>
+    <label><input type="checkbox" data-setting="asterisms" /> Asterisms</label>
+    <label><input type="checkbox" data-setting="planets" /> Planets, Sun &amp; Moon</label>
+    <label><input type="checkbox" data-setting="faintPlanets" /> Uranus &amp; Neptune</label>
+    <label><input type="checkbox" data-setting="dsos" /> Deep-sky objects</label>
+    <label><input type="checkbox" data-setting="horizon" /> Horizon &amp; compass</label>
+    <label><input type="checkbox" data-setting="labels" /> Labels</label>
+    <h2>Star brightness limit <span id="mag-val"></span></h2>
+    <input id="mag-slider" type="range" min="3" max="6.5" step="0.1" />
+    <h2>Camera field of view <span id="fov-val"></span></h2>
+    <input id="fov-slider" type="range" min="30" max="80" step="1" />
+    <p class="hint">Nudge the FOV until labels line up with the real sky.</p>
+  </div>
+
+  <!-- tap-to-identify info card -->
+  <div id="info-panel" hidden>
+    <button id="info-close" title="Close">✕</button>
+    <div id="info-swatch" hidden></div>
+    <h2 id="info-title"></h2>
+    <p id="info-subtitle"></p>
+    <p id="info-warn" hidden></p>
+    <dl id="info-facts"></dl>
+    <p id="info-summary"></p>
+    <p id="info-desc"></p>
+    <p id="info-foot" class="hint small" hidden></p>
+  </div>
+
+  <!-- debug HUD -->
+  <pre id="hud" hidden></pre>
+
+  <!-- transient messages -->
+  <div id="toast" hidden></div>
+
+  <!-- manual location fallback -->
+  <div id="manual-location" hidden>
+    <h2>Set your location</h2>
+    <p class="hint">Location wasn't available. Enter your coordinates:</p>
+    <label>Latitude <input id="in-lat" type="number" step="0.0001" placeholder="40.0150" /></label>
+    <label>Longitude <input id="in-lon" type="number" step="0.0001" placeholder="-105.2705" /></label>
+    <button id="btn-set-location">Use this location</button>
+  </div>
+
+  <!-- start / permission screen -->
+  <div id="start-screen">
+    <div class="start-card">
+      <h1>StarMap</h1>
+      <p>Point your phone at the sky to identify stars, constellations, planets and the Moon in real time.</p>
+      <button id="start-btn" disabled>Enable Sky View</button>
+      <p id="start-status" class="hint">Loading…</p>
+      <p class="hint small">
+        Needs camera, motion &amp; location access, and a secure (HTTPS) connection.
+        Best used outdoors. Tip: the daytime Sun or Moon is a great way to check alignment.
+      </p>
+    </div>
+  </div>
+
+  <script src="vendor/astronomy.browser.js"></script>
+  <script src="js/mat.js"></script>
+  <script src="js/catalog.js"></script>
+  <script src="js/astro.js"></script>
+  <script src="js/sensors.js"></script>
+  <script src="js/projection.js"></script>
+  <script src="js/calibration.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/facts.js"></script>
+  <script src="js/info.js"></script>
+  <script src="js/hud.js"></script>
+  <script src="js/camera.js"></script>
+  <script src="js/app.js"></script>
+  <!-- reconnect / update prompt -->
+  <div id="reconnect-banner" hidden>
+    <span class="rb-msg"></span>
+    <button class="rb-action"></button>
+    <button class="rb-dismiss" aria-label="Dismiss">✕</button>
+  </div>
+
+  <script>
+    // Offline PWA lifecycle: prompt to reconnect to the source when a new
+    // version is available, or when the offline cache is incomplete (e.g. iOS
+    // evicted some of it). A fully-evicted cache while offline can't be caught
+    // here — the page itself wouldn't load — but that's prevented by using the
+    // app now and then.
+    (function () {
+      var banner = document.getElementById('reconnect-banner');
+      var msgEl = banner.querySelector('.rb-msg');
+      var actionEl = banner.querySelector('.rb-action');
+      var dismissEl = banner.querySelector('.rb-dismiss');
+
+      function showBanner(msg, actionLabel, onAction) {
+        msgEl.textContent = msg;
+        if (actionLabel) {
+          actionEl.textContent = actionLabel;
+          actionEl.hidden = false;
+          actionEl.onclick = onAction;
+        } else {
+          actionEl.hidden = true;
+        }
+        banner.hidden = false;
+      }
+      dismissEl.onclick = function () { banner.hidden = true; };
+
+      if (!('serviceWorker' in navigator)) return;
+
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').then(function (reg) {
+          // 1) A new version was downloaded and is waiting to take over.
+          function offerUpdate(worker) {
+            showBanner('A new version of StarMap is ready.', 'Update', function () {
+              worker.postMessage('SKIP_WAITING');
+              actionEl.textContent = 'Updating…';
+              actionEl.disabled = true;
+            });
+          }
+          if (reg.waiting && navigator.serviceWorker.controller) offerUpdate(reg.waiting);
+          reg.addEventListener('updatefound', function () {
+            var nw = reg.installing;
+            if (!nw) return;
+            nw.addEventListener('statechange', function () {
+              if (nw.state === 'installed' && navigator.serviceWorker.controller) offerUpdate(nw);
+            });
+          });
+
+          // 2) Cache-integrity check: is our offline copy still complete?
+          checkCacheIntact();
+        }).catch(function () {});
+
+        // When the fresh worker takes control, reload once to run new code.
+        var reloaded = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          if (reloaded) return; reloaded = true; location.reload();
+        });
+      });
+
+      // Compare cached URLs against the manifest the service worker precached.
+      // If anything essential is missing, re-prime when online, warn when not.
+      function checkCacheIntact() {
+        if (!('caches' in window)) return;
+        caches.keys().then(function (names) {
+          var name = names.filter(function (n) { return n.indexOf('starmap-') === 0; }).sort().pop();
+          if (!name) return;
+          return caches.open(name).then(function (cache) {
+            return cache.keys().then(function (reqs) {
+              // Heuristic: the precache holds ~20 assets. A big shortfall means eviction.
+              if (reqs.length >= 15) return;
+              if (navigator.onLine) {
+                // Silently rebuild the cache from the network via the worker.
+                showBanner('Restoring offline data…', null, null);
+                if (navigator.serviceWorker.controller) {
+                  navigator.serviceWorker.controller.postMessage('RECACHE');
+                }
+                setTimeout(function () { banner.hidden = true; }, 4000);
+              } else {
+                showBanner(
+                  'Offline data is incomplete. Reconnect to the internet once to restore full offline use.',
+                  null, null
+                );
+              }
+            });
+          });
+        }).catch(function () {});
+      }
+    })();
+  </script>
+</body>
+</html>

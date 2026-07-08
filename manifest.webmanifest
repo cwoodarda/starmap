@@ -1,0 +1,14 @@
+{
+  "name": "StarMap — Point at the Sky",
+  "short_name": "StarMap",
+  "description": "Point your phone at the night sky to identify stars, constellations, planets and the Moon.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#05070f",
+  "theme_color": "#05070f",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

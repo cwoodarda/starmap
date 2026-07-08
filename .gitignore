@@ -1,0 +1,4 @@
+# Local self-signed TLS cert + key for the local HTTPS dev server — never publish
+tools/serve/cert/
+
+.DS_Store
