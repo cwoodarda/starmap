@@ -24,6 +24,7 @@
         startBtn: $('start-btn'), status: $('start-status'), toast: $('toast'),
         panel: $('panel'), hud: $('hud'), reticle: $('reticle'),
         manual: $('manual-location'), lat: $('in-lat'), lon: $('in-lon'),
+        manualMsg: $('manual-msg'), gpsBtn: $('btn-use-gps'),
         magVal: $('mag-val'), fovVal: $('fov-val'),
       };
       this.ctx = this.els.canvas.getContext('2d');
@@ -102,11 +103,32 @@
       });
       document.getElementById('btn-set-location').addEventListener('click', () => {
         const la = parseFloat(this.els.lat.value), lo = parseFloat(this.els.lon.value);
-        if (isFinite(la) && isFinite(lo)) {
-          Sensors.setLocationManually(la, lo);
-          Astro.setObserver(la, lo, 0);
+        if (!isFinite(la) || !isFinite(lo)) {
+          this.els.manualMsg.textContent = 'Enter both a latitude and a longitude first.';
+          return;
+        }
+        if (la < -90 || la > 90 || lo < -180 || lo > 180) {
+          this.els.manualMsg.textContent = 'Latitude must be −90…90 and longitude −180…180.';
+          return;
+        }
+        Sensors.setLocationManually(la, lo);
+        Astro.setObserver(la, lo, 0);
+        this.els.manual.hidden = true;
+        this.toast(`Location set: ${la.toFixed(4)}, ${lo.toFixed(4)}.`);
+      });
+      this.els.gpsBtn.addEventListener('click', async () => {
+        this.els.gpsBtn.disabled = true;
+        this.els.manualMsg.textContent = 'Getting your location…';
+        const ok = await Sensors.retryLocation();
+        this.els.gpsBtn.disabled = false;
+        if (ok) {
+          const s = Sensors.state;
+          Astro.setObserver(s.lat, s.lon, s.alt);
           this.els.manual.hidden = true;
-          this.toast('Location set manually.');
+          this.toast('Location found.');
+        } else {
+          this.els.manualMsg.textContent =
+            (Sensors.state.geoError || 'Still no location.') + ' You can enter it manually below.';
         }
       });
 
@@ -154,13 +176,33 @@
         return;
       }
       Sensors.start();
+      // When a real fix arrives (now or later), apply it and dismiss the fallback.
+      Sensors.onLocation((s) => {
+        Astro.setObserver(s.lat, s.lon, s.alt);
+        this.els.manual.hidden = true;
+      });
 
       this.els.start.hidden = true;
       this.els.reticle.hidden = false;
       this.running = true;
-      // location may take a moment; offer manual entry if it never arrives
-      setTimeout(() => { if (!Sensors.state.gpsOK) this.els.manual.hidden = false; }, 6000);
+      // GPS cold-start can take a while; if no fix after 10s, offer the fallback.
+      setTimeout(() => { if (!Sensors.state.gpsOK) this.showManual(); }, 10000);
       requestAnimationFrame((t) => this.loop(t));
+    },
+
+    // Show the manual-location panel, pre-filled with the last saved location
+    // and explaining why GPS didn't come through.
+    showManual() {
+      const lk = Sensors.lastKnownLocation();
+      if (lk && this.els.lat.value === '' && this.els.lon.value === '') {
+        this.els.lat.value = lk.lat.toFixed(4);
+        this.els.lon.value = lk.lon.toFixed(4);
+      }
+      this.els.manualMsg.textContent =
+        Sensors.state.geoError ||
+        (lk ? 'Using your last saved location — tap below to confirm, or update it.'
+            : "Location isn't available yet. Retry GPS, or enter it manually.");
+      this.els.manual.hidden = false;
     },
 
     // Synthetic device->world matrix for demo mode: look at (alt, az) with the

@@ -68,10 +68,12 @@
   <!-- manual location fallback -->
   <div id="manual-location" hidden>
     <h2>Set your location</h2>
-    <p class="hint">Location wasn't available. Enter your coordinates:</p>
-    <label>Latitude <input id="in-lat" type="number" step="0.0001" placeholder="40.0150" /></label>
-    <label>Longitude <input id="in-lon" type="number" step="0.0001" placeholder="-105.2705" /></label>
-    <button id="btn-set-location">Use this location</button>
+    <p id="manual-msg" class="hint">Location wasn't available yet.</p>
+    <button id="btn-use-gps">Use my GPS location</button>
+    <p class="hint small">…or enter coordinates manually:</p>
+    <label>Latitude <input id="in-lat" type="number" step="0.0001" placeholder="e.g. 40.0150" /></label>
+    <label>Longitude <input id="in-lon" type="number" step="0.0001" placeholder="e.g. -105.2705" /></label>
+    <button id="btn-set-location">Use these coordinates</button>
   </div>
 
   <!-- start / permission screen -->

@@ -10,8 +10,25 @@
     orientationOK: false, gpsOK: false, ios: false, northRef: false,
     alpha: 0, beta: 0, gamma: 0, compassHeading: null, compassAccuracy: null,
     screenAngle: 0,
-    lat: null, lon: null, alt: 0, accuracy: null,
+    lat: null, lon: null, alt: 0, accuracy: null, geoError: null,
   };
+
+  const LOC_KEY = 'starmap.lastLocation';
+  function saveLoc(lat, lon) {
+    try { localStorage.setItem(LOC_KEY, JSON.stringify({ lat, lon })); } catch (e) {}
+  }
+  function loadLoc() {
+    try { return JSON.parse(localStorage.getItem(LOC_KEY) || 'null'); } catch (e) { return null; }
+  }
+
+  // Human-readable reason for a geolocation failure.
+  function geoErrText(e) {
+    if (!e) return 'Location unavailable.';
+    if (e.code === 1) return 'Location permission was denied.';
+    if (e.code === 2) return 'Location is unavailable (no GPS/network fix).';
+    if (e.code === 3) return 'Location timed out — try again with a clear sky view.';
+    return e.message || 'Location unavailable.';
+  }
 
   function readScreenAngle() {
     if (screen.orientation && typeof screen.orientation.angle === 'number')
@@ -33,13 +50,18 @@
     state.orientationOK = true;
   }
 
+  let onLocationCb = null;
   function onPos(p) {
     state.lat = p.coords.latitude;
     state.lon = p.coords.longitude;
     state.alt = p.coords.altitude || 0;
     state.accuracy = p.coords.accuracy;
     state.gpsOK = true;
+    state.geoError = null;
+    saveLoc(state.lat, state.lon);
+    if (onLocationCb) onLocationCb(state);
   }
+  function onGeoErr(e) { state.geoError = geoErrText(e); }
 
   // W3C device-orientation rotation matrix: maps a device-frame vector to the
   // Earth frame ENU (X=East, Y=North, Z=Up). alpha/beta/gamma in radians.
@@ -86,14 +108,34 @@
       if (screen.orientation) screen.orientation.addEventListener('change', upd);
 
       if ('geolocation' in navigator) {
-        navigator.geolocation.watchPosition(onPos, () => {}, {
+        navigator.geolocation.watchPosition(onPos, onGeoErr, {
           enableHighAccuracy: true, maximumAge: 10000, timeout: 20000,
         });
+      } else {
+        state.geoError = 'This browser has no location support.';
       }
     },
 
+    // Fire `cb(state)` the first time (and each time) a real fix arrives.
+    onLocation(cb) { onLocationCb = cb; },
+
+    // One-shot high-accuracy retry, for a "Use my GPS location" button.
+    retryLocation() {
+      return new Promise((resolve) => {
+        if (!('geolocation' in navigator)) { state.geoError = 'No location support.'; resolve(false); return; }
+        navigator.geolocation.getCurrentPosition(
+          (p) => { onPos(p); resolve(true); },
+          (e) => { onGeoErr(e); resolve(false); },
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
+        );
+      });
+    },
+
+    lastKnownLocation() { return loadLoc(); },
+
     setLocationManually(lat, lon, altM = 0) {
       state.lat = lat; state.lon = lon; state.alt = altM; state.gpsOK = true;
+      state.geoError = null; saveLoc(lat, lon);
     },
 
     // Device->world (ENU) matrix with screen orientation + calibration applied.
