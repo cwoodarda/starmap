@@ -24,7 +24,8 @@
   // Human-readable reason for a geolocation failure.
   function geoErrText(e) {
     if (!e) return 'Location unavailable.';
-    if (e.code === 1) return 'Location permission was denied.';
+    if (e.code === 1) return 'Location is blocked. Turn it on in Settings → Privacy & Security → ' +
+      'Location Services → Safari Websites (set to "While Using"), then reload. Or enter coordinates below.';
     if (e.code === 2) return 'Location is unavailable (no GPS/network fix).';
     if (e.code === 3) return 'Location timed out — try again with a clear sky view.';
     return e.message || 'Location unavailable.';

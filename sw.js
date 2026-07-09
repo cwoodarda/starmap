@@ -1,6 +1,6 @@
 /* sw.js — minimal offline cache so the app works without a connection once
  * loaded. Bump CACHE when assets change. */
-const CACHE = 'starmap-v5';
+const CACHE = 'starmap-v6';
 const ASSETS = [
   './', './index.html', './css/styles.css', './manifest.webmanifest',
   './icon.svg', './apple-touch-icon.png',
